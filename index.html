@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Death Clock</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        .clock-ring {
+            transform: rotate(-90deg);
+            transform-origin: center;
+            transition: stroke-dashoffset 1s linear;
+        }
+
+        .pulse {
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.2);
+                opacity: 0.6;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-black text-white flex flex-col items-center justify-center min-h-screen px-4 py-6 space-y-6">
+
+    <div class="text-center">
+        <h1 class="text-4xl sm:text-5xl font-bold">Death Clock</h1>
+        <p id="date" class="text-lg sm:text-xl mt-2"></p>
+    </div>
+
+    <div class="relative w-72 h-72 sm:w-80 sm:h-80 flex items-center justify-center">
+        <svg class="absolute w-full h-full" viewBox="0 0 200 200">
+            <circle r="90" cx="100" cy="100" stroke="#333" stroke-width="6" fill="none" />
+            <circle r="90" cx="100" cy="100" stroke="#00ffff" stroke-width="6" fill="none" class="clock-ring"
+                id="clock-ring" />
+        </svg>
+        <div class="text-center">
+            <p id="time" class="text-xl sm:text-2xl font-mono"></p>
+        </div>
+    </div>
+
+    <input id="taskInput" type="text" placeholder="What are you working on?"
+        class="px-4 py-2 rounded bg-gray-800 text-white placeholder-gray-400 border border-gray-600 w-full max-w-md">
+
+    <div class="flex flex-wrap justify-center gap-4">
+        <button id="startBtn"
+            class="bg-green-500 hover:bg-green-600 px-5 py-2 rounded text-white font-semibold">Start</button>
+        <button id="stopBtn" class="bg-red-500 hover:bg-red-600 px-5 py-2 rounded text-white font-semibold"
+            disabled>Stop</button>
+        <button id="clearBtn" class="bg-yellow-500 hover:bg-yellow-600 px-5 py-2 rounded text-white font-semibold">Clear
+            All</button>
+        <button id="exportBtn" class="bg-blue-500 hover:bg-blue-600 px-5 py-2 rounded text-white font-semibold">Export
+            PDF</button>
+    </div>
+
+    <div id="durationDisplay" class="text-lg sm:text-xl font-semibold mt-2 text-center"></div>
+
+    <div id="taskLog"
+        class="mt-4 w-full max-w-6xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm sm:text-base"></div>
+
+    <script>
+        const ring = document.getElementById('clock-ring');
+        const timeDisplay = document.getElementById('time');
+        const dateDisplay = document.getElementById('date');
+        const radius = ring.r.baseVal.value;
+        const circumference = 2 * Math.PI * radius;
+
+        ring.style.strokeDasharray = `${circumference} ${circumference}`;
+        ring.style.strokeDashoffset = circumference;
+
+        function updateClock() {
+            const now = new Date();
+            let hours = now.getHours();
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+
+            hours = hours % 12;
+            hours = hours ? hours : 12;
+            const hoursStr = String(hours).padStart(2, '0');
+
+            const weekday = now.toLocaleDateString('en-US', { weekday: 'short' });
+            const month = now.toLocaleDateString('en-US', { month: 'long' });
+            const day = now.getDate();
+            const year = now.getFullYear();
+
+            timeDisplay.textContent = `${hoursStr}:${minutes}:${seconds} ${ampm}`;
+            dateDisplay.textContent = `${weekday}, ${month} ${day}, ${year}`;
+
+            const offset = circumference - (now.getSeconds() / 60) * circumference;
+            ring.style.strokeDashoffset = offset;
+        }
+
+        const now = new Date();
+        const delay = 1000 - now.getMilliseconds();
+        setTimeout(() => {
+            updateClock();
+            setInterval(updateClock, 1000);
+        }, delay);
+
+        let startTime = null;
+        let taskLogs = JSON.parse(localStorage.getItem('taskLogs')) || [];
+
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const exportBtn = document.getElementById('exportBtn');
+        const durationDisplay = document.getElementById('durationDisplay');
+        const taskInput = document.getElementById('taskInput');
+        const taskLog = document.getElementById('taskLog');
+
+        function renderLog() {
+            taskLog.innerHTML = '';
+            taskLogs.forEach((log, index) => {
+                const div = document.createElement('div');
+                div.className = 'border border-cyan-400 rounded p-3';
+                div.innerHTML = `
+                    <h2 class="text-lg font-bold mb-1 flex items-center gap-2">
+                      <span class="inline-block w-3 h-3 bg-cyan-400 rounded-full"></span>
+                      ${index + 1}. ${log.task}
+                    </h2>
+                    <p><strong>Start:</strong> ${log.start}</p>
+                    <p><strong>End:</strong> ${log.end}</p>
+                    <p><strong>Duration:</strong> ${log.duration}</p>
+                `;
+                taskLog.appendChild(div);
+            });
+        }
+
+        renderLog();
+
+        startBtn.addEventListener('click', () => {
+            const taskName = taskInput.value.trim();
+            if (!taskName) return alert("Please enter a task name.");
+            startTime = new Date();
+            durationDisplay.textContent = `⏳ Tracking: "${taskName}"`;
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            taskInput.disabled = true;
+
+            // Animate task icon during active session
+            startBtn.innerHTML = '<span class="inline-block w-3 h-3 bg-white rounded-full mr-2 pulse"></span>Tracking...';
+        });
+
+        stopBtn.addEventListener('click', () => {
+            const endTime = new Date();
+            const durationMs = endTime - startTime;
+            const seconds = Math.floor((durationMs / 1000) % 60);
+            const minutes = Math.floor((durationMs / (1000 * 60)) % 60);
+            const hours = Math.floor(durationMs / (1000 * 60 * 60));
+
+            const log = {
+                task: taskInput.value.trim(),
+                start: startTime.toLocaleString(),
+                end: endTime.toLocaleString(),
+                duration: `${hours}h ${minutes}m ${seconds}s`
+            };
+            taskLogs.push(log);
+            localStorage.setItem('taskLogs', JSON.stringify(taskLogs));
+
+            durationDisplay.textContent = `✅ Task "${log.task}" recorded.`;
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            taskInput.disabled = false;
+            taskInput.value = '';
+            startBtn.innerHTML = 'Start';
+
+            renderLog();
+        });
+
+        clearBtn.addEventListener('click', () => {
+            if (!confirm("Are you sure you want to clear all tasks?")) return;
+            taskLogs = [];
+            localStorage.removeItem('taskLogs');
+            durationDisplay.textContent = '';
+            renderLog();
+        });
+
+        exportBtn.addEventListener('click', () => {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.setFontSize(14);
+            doc.text("Task Report", 10, 10);
+
+            let y = 20;
+            taskLogs.forEach((log, i) => {
+                doc.text(`${i + 1}. ${log.task}`, 10, y);
+                doc.text(`Start: ${log.start}`, 10, y + 6);
+                doc.text(`End: ${log.end}`, 10, y + 12);
+                doc.text(`Duration: ${log.duration}`, 10, y + 18);
+                y += 28;
+            });
+
+            doc.save("task_report.pdf");
+        });
+    </script>
+</body>
+
+</html>
