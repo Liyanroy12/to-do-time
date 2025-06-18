@@ -131,30 +131,48 @@
                 const div = document.createElement('div');
                 div.className = 'border border-cyan-400 rounded p-3';
                 div.innerHTML = `
-                    <h2 class="text-lg font-bold mb-1 flex items-center gap-2">
-                      <span class="inline-block w-3 h-3 bg-cyan-400 rounded-full"></span>
-                      ${index + 1}. ${log.task}
-                    </h2>
-                    <p><strong>Start:</strong> ${log.start}</p>
-                    <p><strong>End:</strong> ${log.end}</p>
-                    <p><strong>Duration:</strong> ${log.duration}</p>
-                `;
+            <h2 class="text-lg font-bold mb-1 flex items-center gap-2">
+              <span class="inline-block w-3 h-3 bg-cyan-400 rounded-full"></span>
+              ${index + 1}. ${log.task}
+            </h2>
+            <p><strong>Start:</strong> ${log.start}</p>
+            <p><strong>End:</strong> ${log.end}</p>
+            <p><strong>Duration:</strong> ${log.duration}</p>
+        `;
                 taskLog.appendChild(div);
             });
         }
 
         renderLog();
 
+        // Restore running task if exists
+        window.addEventListener('load', () => {
+            const runningTask = JSON.parse(localStorage.getItem('runningTask'));
+            if (runningTask) {
+                startTime = new Date(runningTask.startTime);
+                taskInput.value = runningTask.task;
+                durationDisplay.textContent = `⏳ Tracking: "${runningTask.task}"`;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                taskInput.disabled = true;
+                startBtn.innerHTML = '<span class="inline-block w-3 h-3 bg-white rounded-full mr-2 pulse"></span>Tracking...';
+            }
+        });
+
         startBtn.addEventListener('click', () => {
             const taskName = taskInput.value.trim();
             if (!taskName) return alert("Please enter a task name.");
             startTime = new Date();
+
+            localStorage.setItem('runningTask', JSON.stringify({
+                task: taskName,
+                startTime: startTime.toISOString()
+            }));
+
             durationDisplay.textContent = `⏳ Tracking: "${taskName}"`;
             startBtn.disabled = true;
             stopBtn.disabled = false;
             taskInput.disabled = true;
-
-            // Animate task icon during active session
             startBtn.innerHTML = '<span class="inline-block w-3 h-3 bg-white rounded-full mr-2 pulse"></span>Tracking...';
         });
 
@@ -173,6 +191,7 @@
             };
             taskLogs.push(log);
             localStorage.setItem('taskLogs', JSON.stringify(taskLogs));
+            localStorage.removeItem('runningTask');
 
             durationDisplay.textContent = `✅ Task "${log.task}" recorded.`;
             startBtn.disabled = false;
@@ -188,6 +207,7 @@
             if (!confirm("Are you sure you want to clear all tasks?")) return;
             taskLogs = [];
             localStorage.removeItem('taskLogs');
+            localStorage.removeItem('runningTask');
             durationDisplay.textContent = '';
             renderLog();
         });
