@@ -7,6 +7,7 @@
     <title>Death Clock</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         .clock-ring {
             transform: rotate(-90deg);
@@ -39,11 +40,13 @@
 
 <body class="bg-black text-white flex flex-col items-center justify-center min-h-screen px-4 py-6 space-y-6">
 
+    <!-- Title and Date -->
     <div class="text-center">
         <h1 class="text-4xl sm:text-5xl font-bold">Death Clock</h1>
         <p id="date" class="text-lg sm:text-xl mt-2"></p>
     </div>
 
+    <!-- Clock Circle -->
     <div class="relative w-72 h-72 sm:w-80 sm:h-80 flex items-center justify-center">
         <svg class="absolute w-full h-full" viewBox="0 0 200 200">
             <circle r="90" cx="100" cy="100" stroke="#333" stroke-width="6" fill="none" />
@@ -55,9 +58,11 @@
         </div>
     </div>
 
+    <!-- Input Task -->
     <input id="taskInput" type="text" placeholder="What are you working on?"
         class="px-4 py-2 rounded bg-gray-800 text-white placeholder-gray-400 border border-gray-600 w-full max-w-md">
 
+    <!-- Buttons -->
     <div class="flex flex-wrap justify-center gap-4">
         <button id="startBtn"
             class="bg-green-500 hover:bg-green-600 px-5 py-2 rounded text-white font-semibold">Start</button>
@@ -69,11 +74,14 @@
             PDF</button>
     </div>
 
+    <!-- Current status -->
     <div id="durationDisplay" class="text-lg sm:text-xl font-semibold mt-2 text-center"></div>
 
+    <!-- Task log -->
     <div id="taskLog"
         class="mt-4 w-full max-w-6xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm sm:text-base"></div>
 
+    <!-- Script -->
     <script>
         const ring = document.getElementById('clock-ring');
         const timeDisplay = document.getElementById('time');
@@ -91,8 +99,7 @@
             const seconds = String(now.getSeconds()).padStart(2, '0');
             const ampm = hours >= 12 ? 'PM' : 'AM';
 
-            hours = hours % 12;
-            hours = hours ? hours : 12;
+            hours = hours % 12 || 12;
             const hoursStr = String(hours).padStart(2, '0');
 
             const weekday = now.toLocaleDateString('en-US', { weekday: 'short' });
@@ -115,7 +122,23 @@
         }, delay);
 
         let startTime = null;
-        let taskLogs = JSON.parse(localStorage.getItem('taskLogs')) || [];
+
+        function loadTaskLogs() {
+            const stored = JSON.parse(localStorage.getItem('taskLogs'));
+            if (stored) {
+                const now = Date.now();
+                const oneDay = 24 * 60 * 60 * 1000;
+                if (now - stored.savedAt > oneDay) {
+                    localStorage.removeItem('taskLogs');
+                    return [];
+                } else {
+                    return stored.logs;
+                }
+            }
+            return [];
+        }
+
+        let taskLogs = loadTaskLogs();
 
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
@@ -131,13 +154,13 @@
                 const div = document.createElement('div');
                 div.className = 'border border-cyan-400 rounded p-3';
                 div.innerHTML = `
-            <h2 class="text-lg font-bold mb-1 flex items-center gap-2">
-              <span class="inline-block w-3 h-3 bg-cyan-400 rounded-full"></span>
-              ${index + 1}. ${log.task}
-            </h2>
-            <p><strong>Start:</strong> ${log.start}</p>
-            <p><strong>End:</strong> ${log.end}</p>
-            <p><strong>Duration:</strong> ${log.duration}</p>
+          <h2 class="text-lg font-bold mb-1 flex items-center gap-2">
+            <span class="inline-block w-3 h-3 bg-cyan-400 rounded-full"></span>
+            ${index + 1}. ${log.task}
+          </h2>
+          <p><strong>Start:</strong> ${log.start}</p>
+          <p><strong>End:</strong> ${log.end}</p>
+          <p><strong>Duration:</strong> ${log.duration}</p>
         `;
                 taskLog.appendChild(div);
             });
@@ -145,7 +168,6 @@
 
         renderLog();
 
-        // Restore running task if exists
         window.addEventListener('load', () => {
             const runningTask = JSON.parse(localStorage.getItem('runningTask'));
             if (runningTask) {
@@ -161,9 +183,16 @@
 
         startBtn.addEventListener('click', () => {
             const taskName = taskInput.value.trim();
-            if (!taskName) return alert("Please enter a task name.");
-            startTime = new Date();
+            if (!taskName) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Oops!',
+                    text: 'Please enter a task name.'
+                });
+                return;
+            }
 
+            startTime = new Date();
             localStorage.setItem('runningTask', JSON.stringify({
                 task: taskName,
                 startTime: startTime.toISOString()
@@ -174,6 +203,14 @@
             stopBtn.disabled = false;
             taskInput.disabled = true;
             startBtn.innerHTML = '<span class="inline-block w-3 h-3 bg-white rounded-full mr-2 pulse"></span>Tracking...';
+
+            Swal.fire({
+                icon: 'success',
+                title: 'Started!',
+                text: `Task "${taskName}" started.`,
+                timer: 1500,
+                showConfirmButton: false
+            });
         });
 
         stopBtn.addEventListener('click', () => {
@@ -189,8 +226,12 @@
                 end: endTime.toLocaleString(),
                 duration: `${hours}h ${minutes}m ${seconds}s`
             };
+
             taskLogs.push(log);
-            localStorage.setItem('taskLogs', JSON.stringify(taskLogs));
+            localStorage.setItem('taskLogs', JSON.stringify({
+                savedAt: Date.now(),
+                logs: taskLogs
+            }));
             localStorage.removeItem('runningTask');
 
             durationDisplay.textContent = `✅ Task "${log.task}" recorded.`;
@@ -201,15 +242,42 @@
             startBtn.innerHTML = 'Start';
 
             renderLog();
+
+            Swal.fire({
+                icon: 'success',
+                title: 'Task Saved!',
+                text: `Task "${log.task}" has been recorded.`,
+                timer: 1500,
+                showConfirmButton: false
+            });
         });
 
         clearBtn.addEventListener('click', () => {
-            if (!confirm("Are you sure you want to clear all tasks?")) return;
-            taskLogs = [];
-            localStorage.removeItem('taskLogs');
-            localStorage.removeItem('runningTask');
-            durationDisplay.textContent = '';
-            renderLog();
+            Swal.fire({
+                title: 'Are you sure?',
+                text: "This will delete all tasks!",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#e3342f',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, delete all!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    taskLogs = [];
+                    localStorage.removeItem('taskLogs');
+                    localStorage.removeItem('runningTask');
+                    durationDisplay.textContent = '';
+                    renderLog();
+
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Cleared!',
+                        text: 'All task logs have been removed.',
+                        timer: 1500,
+                        showConfirmButton: false
+                    });
+                }
+            });
         });
 
         exportBtn.addEventListener('click', () => {
